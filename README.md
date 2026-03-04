@@ -6,32 +6,19 @@ Vibecodingu töötoa projekt — veebiäpp, mis kontrollib mikroettevõtja aasta
 
 ### 1. Klooni projekt
 
-Ava Cursor, ava terminal (Terminal → New Terminal) ja kirjuta:
-
-git clone https://github.com/SINU-KASUTAJANIMI/aastaaruande-kontroll.git
-cd aastaaruande-kontroll
-
-### 2. Installi sõltuvused
-
-npm install
+### 2. Lase Cursoril projekt seadistada ja planeerida
 
 ### 3. Seadista keskkonnamuutujad
 
-Kopeeri näidisfail:
+### 4. Ühenda Supabase
 
-cp .env.example .env
+### 5. Ehita Cursori abiga äpp - autentimine, faili üleslaadimine, analüüs
 
-Ava .env fail ja asenda väärtused (saad juhendajalt):
+### 6. Viimistle välimust
 
-VITE_SUPABASE_URL=siia-tuleb-supabase-url
-VITE_SUPABASE_ANON_KEY=siia-tuleb-supabase-key
-VITE_OPENAI_API_KEY=siia-tuleb-openai-key
 
-### 4. Käivita äpp
-
-npm run dev
-
-Ava brauseris: http://localhost:5173
+Äpi käivitamine: npm run dev
+Ava brauseris: http://localhost:...
 
 ## Kasulikud Cursori käsud
 
