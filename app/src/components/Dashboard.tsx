@@ -1,17 +1,57 @@
 import { ChangeEvent, useState } from "react";
+import OpenAI from "openai";
 import { supabase } from "../lib/supabase";
+import systemPrompt from "../prompts/system-prompt.txt";
+import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.mjs?worker&url";
+
+const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
+
+const openai = new OpenAI({
+  apiKey: openaiApiKey,
+  dangerouslyAllowBrowser: true,
+});
+
+async function extractTextFromPdf(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdfjsLib: any = await import("pdfjs-dist/build/pdf.mjs");
+
+  // Seadistame pdf.js worker'i, et vältida GlobalWorkerOptions viga.
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
+
+  const pdf = await pdfjsLib.getDocument({
+    data: new Uint8Array(arrayBuffer),
+  }).promise;
+
+  let fullText = "";
+
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const textContent = await page.getTextContent();
+
+    const pageText = textContent.items
+      .map((item: any) => ("str" in item ? item.str : ""))
+      .join(" ");
+
+    fullText += `\n\n[Lehekülg ${pageNumber}]\n${pageText}`;
+  }
+
+  return fullText.trim();
+}
 
 export function Dashboard() {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState<string | null>(null);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0] ?? null;
     setFile(selectedFile);
     setError(null);
     setSuccessMessage(null);
+    setAiResult(null);
   };
 
   const handleUpload = async () => {
@@ -25,9 +65,17 @@ export function Dashboard() {
       return;
     }
 
+    if (!openaiApiKey) {
+      setError(
+        "Puudub OpenAI API võti (VITE_OPENAI_API_KEY). Lisa see .env faili."
+      );
+      return;
+    }
+
     setIsUploading(true);
     setError(null);
     setSuccessMessage(null);
+    setAiResult(null);
 
     try {
       const {
@@ -91,13 +139,39 @@ export function Dashboard() {
       }
 
       setSuccessMessage(
-        "Fail on edukalt üles laaditud ja kirje lisatud reports tabelisse."
+        "Fail on edukalt üles laaditud ja kirje lisatud reports tabelisse. Alustan AI-analüüsi..."
+      );
+
+      setIsAnalyzing(true);
+
+      const pdfText = await extractTextFromPdf(file);
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-5-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content:
+              "Allpool on mikroettevõtja majandusaasta aruande tekst PDF-ist. Kontrolli aruannet vastavalt süsteemipromptis toodud reeglitele.\n\n" +
+              pdfText,
+          },
+        ],
+      });
+
+      const content = completion.choices[0]?.message?.content;
+      setAiResult(typeof content === "string" ? content : content ?? null);
+
+      setSuccessMessage(
+        "Fail on edukalt üles laaditud ja AI analüüs on valmis."
       );
       setFile(null);
     } catch (err) {
+      console.error("Dashboard upload/analyze error:", err);
       setError("Midagi läks valesti. Palun proovi uuesti.");
     } finally {
       setIsUploading(false);
+      setIsAnalyzing(false);
     }
   };
 
@@ -160,14 +234,29 @@ export function Dashboard() {
 
             <button
               type="button"
-              disabled={isUploading}
+              disabled={isUploading || isAnalyzing}
               onClick={handleUpload}
               className="mt-2 inline-flex items-center rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {isUploading ? "Laen üles..." : "Lae fail üles"}
+              {isUploading
+                ? "Laen üles..."
+                : isAnalyzing
+                ? "Analüüsin..."
+                : "Lae fail üles"}
             </button>
           </div>
         </section>
+
+        {aiResult ? (
+          <section className="rounded-xl bg-white p-6 shadow-sm">
+            <h2 className="mb-3 text-xl font-semibold text-slate-900">
+              AI analüüsi tulemus
+            </h2>
+            <pre className="whitespace-pre-wrap rounded-md bg-slate-50 p-4 text-sm text-slate-800">
+              {aiResult}
+            </pre>
+          </section>
+        ) : null}
       </main>
     </div>
   );
